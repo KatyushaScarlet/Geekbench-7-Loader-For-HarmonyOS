@@ -1,0 +1,13 @@
+--- a/sysdeps/unix/sysv/linux/clone-internal.c
++++ b/sysdeps/unix/sysv/linux/clone-internal.c
+@@ -95,7 +95,9 @@
+ __clone_internal (struct clone_args *cl_args,
+ 		  int (*func) (void *arg), void *arg)
+ {
+-#ifdef HAVE_CLONE3_WRAPPER
++  /* This target execution domain terminates clone3 rather than returning
++     ENOSYS.  Use glibc's existing legacy clone argument translation.  */
++#if 0
+   int saved_errno = errno;
+   int ret = __clone3_internal (cl_args, func, arg);
+   if (ret != -1 || errno != ENOSYS)

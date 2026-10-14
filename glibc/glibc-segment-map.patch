@@ -1,0 +1,67 @@
+--- a/elf/dl-map-segments.h
++++ b/elf/dl-map-segments.h
+@@ -98,31 +98,32 @@
+ 
+       /* Remember which part of the address space this object uses.  */
+-      l->l_map_start = _dl_map_segment (c, mappref, maplength, fd);
++      /* Reserve inaccessible anonymous space.  Do not map non-executable
++         file ranges with the first LOAD's permissions: code-signing kernels
++         can reject that temporary oversized executable mapping.  */
++      ElfW(Addr) align = MAX (c->mapalign, GLRO(dl_pagesize));
++      ElfW(Addr) reserve_len = maplength + align;
++      ElfW(Addr) reserve = (ElfW(Addr)) __mmap ((void *) mappref,
++                            reserve_len, PROT_NONE,
++                            MAP_ANONYMOUS | MAP_COPY, -1, 0);
++      if (__glibc_unlikely ((void *) reserve == MAP_FAILED))
++        return DL_MAP_SEGMENTS_ERROR_MAP_SEGMENT;
++      l->l_map_start = ALIGN_UP (reserve, align);
++      if (l->l_map_start > reserve)
++        __munmap ((void *) reserve, l->l_map_start - reserve);
++      ElfW(Addr) reserve_end = reserve + reserve_len;
++      ElfW(Addr) used_end = ALIGN_UP (l->l_map_start + maplength,
++                                    GLRO(dl_pagesize));
++      if (reserve_end > used_end)
++        __munmap ((void *) used_end, reserve_end - used_end);
+       if (__glibc_unlikely ((void *) l->l_map_start == MAP_FAILED))
+         return DL_MAP_SEGMENTS_ERROR_MAP_SEGMENT;
+ 
+       l->l_map_end = l->l_map_start + maplength;
+       l->l_addr = l->l_map_start - c->mapstart;
+ 
+-      if (has_holes)
+-        {
+-          /* Change protection on the excess portion to disallow all access;
+-             the portions we do not remap later will be inaccessible as if
+-             unallocated.  Then jump into the normal segment-mapping loop to
+-             handle the portion of the segment past the end of the file
+-             mapping.  */
+-	  if (__glibc_unlikely (loadcmds[nloadcmds - 1].mapstart <
+-				c->mapend))
+-	    return N_("ELF load command address/offset not page-aligned");
+-          if (__glibc_unlikely
+-              (__mprotect ((caddr_t) (l->l_addr + c->mapend),
+-                           loadcmds[nloadcmds - 1].mapstart - c->mapend,
+-                           PROT_NONE) < 0))
+-            return DL_MAP_SEGMENTS_ERROR_MPROTECT;
+-        }
+-
+       l->l_contiguous = 1;
+ 
+-      goto postmap;
++      /* Map every LOAD with its own original flags in the normal loop.  */
++      goto map_loads;
+     }
+ 
+@@ -132,5 +133,6 @@
+   l->l_map_end = l->l_map_start + maplength;
+   l->l_contiguous = !has_holes;
+ 
++ map_loads:
+   while (c < &loadcmds[nloadcmds])
+     {
+@@ -143,5 +145,4 @@
+               == MAP_FAILED))
+         return DL_MAP_SEGMENTS_ERROR_MAP_SEGMENT;
+ 
+-    postmap:
+       _dl_postprocess_loadcmd (l, header, c);

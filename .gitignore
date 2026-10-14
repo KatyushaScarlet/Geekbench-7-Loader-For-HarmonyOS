@@ -1,0 +1,8 @@
+/build/
+*.partial
+# 用户自行放入的 Geekbench 专有文件
+/dist/geekbench7
+/dist/geekbench_aarch64
+/dist/geekbench.plxr
+/dist/geekbench-workload.plxr
+/dist/libtensorrt_rtx.so
